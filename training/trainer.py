@@ -17,7 +17,7 @@ class Trainer:
 
         # --- Environment ---
         self.env = GymWrapper(cfg.env_name, cfg).get_env()
-        self.obs_dim = int(np.prod(cfg.obs_shape))  # handle vector obs
+        self.obs_dim = int(np.prod(cfg.obs_shape))  # flatten if needed
         self.action_size = cfg.action_size
 
         # --- Networks ---
@@ -49,8 +49,8 @@ class Trainer:
         self.lambda_ = cfg.lambda_
 
     def compute_gae(self, rewards, values, masks):
-        """Compute Generalized Advantage Estimation (GAE)"""
-        values = values + [0]
+        """Compute Generalized Advantage Estimation (GAE). 'values' are tensors."""
+        values = values + [torch.tensor(0.0)]
         gae = 0
         returns = []
         for step in reversed(range(len(rewards))):
@@ -63,7 +63,7 @@ class Trainer:
         episode_rewards = deque(maxlen=100)
 
         for ep in range(1, self.cfg.train_episodes + 1):
-            # --- Reset environment (Gymnasium returns obs, info) ---
+            # --- Reset environment ---
             obs, _ = self.env.reset()
             obs = torch.tensor(obs, dtype=torch.float32)
             done = False
@@ -82,14 +82,14 @@ class Trainer:
                 log_prob = dist.log_prob(action)
                 value = self.critic(obs)
 
-                # --- Step environment (Gymnasium) ---
+                # --- Step environment (Gymnasium returns terminated, truncated) ---
                 next_obs, reward, terminated, truncated, info = self.env.step(action.numpy())
                 done = terminated or truncated
                 next_obs = torch.tensor(next_obs, dtype=torch.float32)
 
                 # --- Store trajectory ---
                 rewards.append(reward)
-                values.append(value.item())
+                values.append(value)        # keep tensor, do NOT .item()
                 log_probs.append(log_prob)
                 masks.append(1 - float(done))
 
@@ -98,10 +98,9 @@ class Trainer:
 
             # --- Compute returns and advantages ---
             returns = self.compute_gae(rewards, values, masks)
-            returns = torch.tensor(returns, dtype=torch.float32)
+            returns = torch.stack(returns).detach()  # detach so critic loss does not backprop through future steps
+            values = torch.stack(values)
             log_probs = torch.stack(log_probs)
-            values = torch.tensor(values, dtype=torch.float32)
-
             advantages = returns - values
 
             # --- Actor loss ---
