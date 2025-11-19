@@ -15,12 +15,12 @@ class Trainer:
     def __init__(self, cfg):
         self.cfg = cfg
 
-        # Environment
+        # --- Environment ---
         self.env = GymWrapper(cfg.env_name, cfg).get_env()
-        self.obs_dim = cfg.obs_shape[0]
+        self.obs_dim = int(np.prod(cfg.obs_shape))  # handle vector obs
         self.action_size = cfg.action_size
 
-        # Networks
+        # --- Networks ---
         self.actor = Actor(
             self.obs_dim, self.action_size,
             hidden_size=cfg.hidden_size,
@@ -34,14 +34,14 @@ class Trainer:
             activation=cfg.activation
         )
 
-        # Optimizers
+        # --- Optimizers ---
         self.actor_opt = optim.Adam(self.actor.parameters(), lr=cfg.actor_lr)
         self.critic_opt = optim.Adam(self.critic.parameters(), lr=cfg.critic_lr)
 
-        # Replay buffer
+        # --- Replay buffer ---
         self.buffer = ReplayBuffer(cfg)
 
-        # Logging
+        # --- Logging / Directories ---
         os.makedirs(cfg.model_dir, exist_ok=True)
         os.makedirs(cfg.log_dir, exist_ok=True)
 
@@ -82,7 +82,7 @@ class Trainer:
                 log_prob = dist.log_prob(action)
                 value = self.critic(obs)
 
-                # --- Step environment (Gymnasium returns terminated, truncated) ---
+                # --- Step environment (Gymnasium) ---
                 next_obs, reward, terminated, truncated, info = self.env.step(action.numpy())
                 done = terminated or truncated
                 next_obs = torch.tensor(next_obs, dtype=torch.float32)
