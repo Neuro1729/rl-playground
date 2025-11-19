@@ -1,28 +1,31 @@
+# utils/buffer.py
 import numpy as np
-from collections import deque
 import random
+from training.config import Config
 
 class ReplayBuffer:
     """
     Fixed-size buffer to store experience tuples.
+    Uses hyperparameters from Config.
     Supports sampling batches for training.
     """
 
-    def __init__(self, obs_shape, action_size, capacity=10000, batch_size=32, seed=42):
-        self.capacity = capacity
-        self.batch_size = batch_size
-        self.obs_shape = obs_shape
-        self.action_size = action_size
-        self.seed = seed
-        random.seed(seed)
-        np.random.seed(seed)
+    def __init__(self, cfg: Config):
+        self.capacity = cfg.buffer_capacity
+        self.batch_size = cfg.batch_size
+        self.obs_shape = cfg.obs_shape
+        self.action_size = cfg.action_size
+        self.seed = cfg.seed
+
+        random.seed(self.seed)
+        np.random.seed(self.seed)
 
         # Buffers
-        self.states = np.zeros((capacity, *obs_shape), dtype=np.float32)
-        self.actions = np.zeros((capacity, action_size), dtype=np.float32)
-        self.rewards = np.zeros((capacity,), dtype=np.float32)
-        self.next_states = np.zeros((capacity, *obs_shape), dtype=np.float32)
-        self.dones = np.zeros((capacity,), dtype=np.float32)
+        self.states = np.zeros((self.capacity, *self.obs_shape), dtype=np.float32)
+        self.actions = np.zeros((self.capacity, self.action_size), dtype=np.float32)
+        self.rewards = np.zeros((self.capacity,), dtype=np.float32)
+        self.next_states = np.zeros((self.capacity, *self.obs_shape), dtype=np.float32)
+        self.dones = np.zeros((self.capacity,), dtype=np.float32)
 
         self.ptr = 0
         self.size = 0
@@ -53,4 +56,3 @@ class ReplayBuffer:
 
     def __len__(self):
         return self.size
-
