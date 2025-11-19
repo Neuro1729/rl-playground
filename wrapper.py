@@ -2,46 +2,44 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-class OneHotAction(gym.ActionWrapper):
-    """
-    Converts a discrete action into a one-hot vector.
-    Useful for actor networks that output a probability distribution.
-    """
+class OneHotAction(gym.Wrapper):
+    """Wrap discrete actions into one-hot vectors"""
     def __init__(self, env):
         super().__init__(env)
-        assert isinstance(env.action_space, spaces.Discrete), \
-            "OneHotAction wrapper only works with discrete action spaces."
+        assert isinstance(env.action_space, spaces.Discrete)
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(env.action_space.n,), dtype=np.float32)
 
     def action(self, action):
-        """Convert one-hot vector to integer index for env.step"""
-        index = np.argmax(action).astype(int)
-        return index
+        return int(np.argmax(action))
 
     def reverse_action(self, action):
-        """Convert integer index back to one-hot vector (for evaluation if needed)"""
         vec = np.zeros(self.action_space.shape, dtype=np.float32)
         vec[action] = 1.0
         return vec
 
 class ActionRepeat(gym.Wrapper):
-    """Repeats the same action for 'repeat' steps."""
+    """Repeat same action for N steps"""
     def __init__(self, env, repeat=1):
         super().__init__(env)
         self.repeat = repeat
 
     def step(self, action):
         total_reward = 0
+        terminated = False
+        truncated = False
+        info = {}
         for _ in range(self.repeat):
-            obs, reward, terminated, truncated, info = self.env.step(action)
-            done = terminated or truncated
+            obs, reward, term, trunc, i = self.env.step(action)
             total_reward += reward
-            if done:
+            terminated = term
+            truncated = trunc
+            info.update(i)
+            if terminated or truncated:
                 break
-        return obs, total_reward, done, info
+        return obs, total_reward, terminated, truncated, info
 
 class TimeLimit(gym.Wrapper):
-    """Ends episode after max_steps."""
+    """End episode after max_steps"""
     def __init__(self, env, max_steps):
         super().__init__(env)
         self.max_steps = max_steps
@@ -55,21 +53,19 @@ class TimeLimit(gym.Wrapper):
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         self.current_step += 1
-        done = terminated or truncated
         if self.current_step >= self.max_steps:
-            done = True
+            truncated = True
             info["time_limit_reached"] = True
-        return obs, reward, done, info
+        return obs, reward, terminated, truncated, info
 
 class GymWrapper:
-    """Factory to create Gymnasium env with optional wrappers."""
+    """Factory to create Gymnasium env with wrappers"""
     def __init__(self, env_name, cfg):
         self.cfg = cfg
-        self.env = gym.make(env_name)
+        self.env = gym.make(env_name, render_mode="human" if cfg.render else None)
 
-        # Apply wrappers
         if cfg.use_pixel:
-            raise NotImplementedError("Pixel-based wrapper not implemented yet")
+            raise NotImplementedError("Pixel-based wrapper not implemented")
         if cfg.action_repeat > 1:
             self.env = ActionRepeat(self.env, repeat=cfg.action_repeat)
         self.env = TimeLimit(self.env, cfg.max_steps)
