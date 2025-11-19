@@ -21,21 +21,25 @@ class Trainer:
         self.action_size = cfg.action_size
 
         # Networks
-        self.actor = Actor(self.obs_dim, self.action_size,
-                           hidden_size=cfg.hidden_size,
-                           num_layers=cfg.actor_layers,
-                           activation=cfg.activation)
-        self.critic = Critic(self.obs_dim,
-                             hidden_size=cfg.hidden_size,
-                             num_layers=cfg.critic_layers,
-                             activation=cfg.activation)
+        self.actor = Actor(
+            self.obs_dim, self.action_size,
+            hidden_size=cfg.hidden_size,
+            num_layers=cfg.actor_layers,
+            activation=cfg.activation
+        )
+        self.critic = Critic(
+            self.obs_dim,
+            hidden_size=cfg.hidden_size,
+            num_layers=cfg.critic_layers,
+            activation=cfg.activation
+        )
 
         # Optimizers
         self.actor_opt = optim.Adam(self.actor.parameters(), lr=cfg.actor_lr)
         self.critic_opt = optim.Adam(self.critic.parameters(), lr=cfg.critic_lr)
 
-        # Replay buffer
-        self.buffer = ReplayBuffer(cfg.buffer_capacity)
+        # Replay buffer: now pass cfg, not just buffer_capacity
+        self.buffer = ReplayBuffer(cfg)
 
         # Logging
         os.makedirs(cfg.model_dir, exist_ok=True)
@@ -45,9 +49,7 @@ class Trainer:
         self.lambda_ = cfg.lambda_
 
     def compute_gae(self, rewards, values, masks):
-        """
-        Compute Generalized Advantage Estimation (GAE)
-        """
+        """Compute Generalized Advantage Estimation (GAE)"""
         values = values + [0]
         gae = 0
         returns = []
