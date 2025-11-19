@@ -1,6 +1,6 @@
-import gym
+import gymnasium as gym
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 
 class OneHotAction(gym.ActionWrapper):
     """
@@ -9,7 +9,7 @@ class OneHotAction(gym.ActionWrapper):
     """
     def __init__(self, env):
         super().__init__(env)
-        assert isinstance(env.action_space, gym.spaces.Discrete), \
+        assert isinstance(env.action_space, spaces.Discrete), \
             "OneHotAction wrapper only works with discrete action spaces."
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(env.action_space.n,), dtype=np.float32)
 
@@ -25,28 +25,23 @@ class OneHotAction(gym.ActionWrapper):
         return vec
 
 class ActionRepeat(gym.Wrapper):
-    """
-    Repeats the same action for 'repeat' steps.
-    Useful for frame-skipping or environments with high-frequency dynamics.
-    """
+    """Repeats the same action for 'repeat' steps."""
     def __init__(self, env, repeat=1):
         super().__init__(env)
         self.repeat = repeat
 
     def step(self, action):
         total_reward = 0
-        done = False
         for _ in range(self.repeat):
-            obs, reward, done, info = self.env.step(action)
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            done = terminated or truncated
             total_reward += reward
             if done:
                 break
         return obs, total_reward, done, info
 
 class TimeLimit(gym.Wrapper):
-    """
-    Ends the episode after a fixed number of steps.
-    """
+    """Ends episode after max_steps."""
     def __init__(self, env, max_steps):
         super().__init__(env)
         self.max_steps = max_steps
@@ -54,20 +49,20 @@ class TimeLimit(gym.Wrapper):
 
     def reset(self, **kwargs):
         self.current_step = 0
-        return self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
+        return obs, info
 
     def step(self, action):
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, terminated, truncated, info = self.env.step(action)
         self.current_step += 1
+        done = terminated or truncated
         if self.current_step >= self.max_steps:
             done = True
             info["time_limit_reached"] = True
         return obs, reward, done, info
 
 class GymWrapper:
-    """
-    Factory to create a Gym environment with optional wrappers.
-    """
+    """Factory to create Gymnasium env with optional wrappers."""
     def __init__(self, env_name, cfg):
         self.cfg = cfg
         self.env = gym.make(env_name)
