@@ -22,7 +22,7 @@ def evaluate(cfg: Config, actor_path: str, render: bool = True):
     total_rewards = []
 
     for ep in range(cfg.eval_episodes):
-        obs = env.reset()
+        obs, _ = env.reset()
         obs = torch.tensor(obs, dtype=torch.float32)
         done = False
         ep_reward = 0
@@ -31,8 +31,11 @@ def evaluate(cfg: Config, actor_path: str, render: bool = True):
             with torch.no_grad():
                 probs = actor(obs)
             action = torch.argmax(probs).item()
-            obs, reward, done, _ = env.step(action)
-            obs = torch.tensor(obs, dtype=torch.float32)
+            
+            # Gymnasium step
+            next_obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+            obs = torch.tensor(next_obs, dtype=torch.float32)
             ep_reward += reward
 
             if render:
