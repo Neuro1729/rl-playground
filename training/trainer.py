@@ -38,7 +38,7 @@ class Trainer:
         self.actor_opt = optim.Adam(self.actor.parameters(), lr=cfg.actor_lr)
         self.critic_opt = optim.Adam(self.critic.parameters(), lr=cfg.critic_lr)
 
-        # Replay buffer: now pass cfg, not just buffer_capacity
+        # Replay buffer
         self.buffer = ReplayBuffer(cfg)
 
         # Logging
@@ -63,7 +63,8 @@ class Trainer:
         episode_rewards = deque(maxlen=100)
 
         for ep in range(1, self.cfg.train_episodes + 1):
-            obs = self.env.reset()
+            # --- Reset environment (Gymnasium returns obs, info) ---
+            obs, _ = self.env.reset()
             obs = torch.tensor(obs, dtype=torch.float32)
             done = False
             total_reward = 0
@@ -74,16 +75,19 @@ class Trainer:
             masks = []
 
             while not done:
+                # --- Actor selects action ---
                 probs = self.actor(obs)
                 dist = Categorical(probs)
                 action = dist.sample()
                 log_prob = dist.log_prob(action)
                 value = self.critic(obs)
 
-                next_obs, reward, done, _ = self.env.step(action.numpy())
+                # --- Step environment (Gymnasium returns terminated, truncated) ---
+                next_obs, reward, terminated, truncated, info = self.env.step(action.numpy())
+                done = terminated or truncated
                 next_obs = torch.tensor(next_obs, dtype=torch.float32)
 
-                # store trajectory
+                # --- Store trajectory ---
                 rewards.append(reward)
                 values.append(value.item())
                 log_probs.append(log_prob)
@@ -92,7 +96,7 @@ class Trainer:
                 obs = next_obs
                 total_reward += reward
 
-            # Compute returns and advantages
+            # --- Compute returns and advantages ---
             returns = self.compute_gae(rewards, values, masks)
             returns = torch.tensor(returns, dtype=torch.float32)
             log_probs = torch.stack(log_probs)
@@ -100,13 +104,13 @@ class Trainer:
 
             advantages = returns - values
 
-            # Actor loss
+            # --- Actor loss ---
             actor_loss = -(log_probs * advantages.detach()).mean()
 
-            # Critic loss
+            # --- Critic loss ---
             critic_loss = F.mse_loss(values, returns)
 
-            # Update networks
+            # --- Update networks ---
             self.actor_opt.zero_grad()
             actor_loss.backward()
             torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.cfg.grad_clip)
@@ -119,12 +123,12 @@ class Trainer:
 
             episode_rewards.append(total_reward)
 
-            # Logging
+            # --- Logging ---
             if ep % 10 == 0:
                 avg_reward = np.mean(episode_rewards)
                 print(f"Episode {ep} | Avg Reward: {avg_reward:.2f}")
 
-            # Save model
+            # --- Save models ---
             if ep % self.cfg.save_every == 0:
                 torch.save(self.actor.state_dict(), os.path.join(self.cfg.model_dir, f"actor_ep{ep}.pt"))
                 torch.save(self.critic.state_dict(), os.path.join(self.cfg.model_dir, f"critic_ep{ep}.pt"))
